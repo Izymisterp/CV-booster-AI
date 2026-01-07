@@ -1,0 +1,22 @@
+steps:
+  # Build l'image Docker
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/cv-booster-ai:$COMMIT_SHA', '.']
+  
+  # Push l'image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/cv-booster-ai:$COMMIT_SHA']
+  
+  # Déployer sur Cloud Run (optionnel)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'cv-booster-ai'
+      - '--image=gcr.io/$PROJECT_ID/cv-booster-ai:$COMMIT_SHA'
+      - '--region=europe-west1'
+      - '--platform=managed'
+
+images:
+  - 'gcr.io/$PROJECT_ID/cv-booster-ai:$COMMIT_SHA'
