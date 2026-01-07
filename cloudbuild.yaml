@@ -7,7 +7,7 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'gcr.io/$PROJECT_ID/cv-booster-ai:$COMMIT_SHA']
   
-  # Déployer sur Cloud Run (optionnel)
+  # Déployer sur Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -17,6 +17,15 @@ steps:
       - '--image=gcr.io/$PROJECT_ID/cv-booster-ai:$COMMIT_SHA'
       - '--region=europe-west1'
       - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars=VITE_GEMINI_API_KEY=$$GEMINI_API_KEY'
+    secretEnv: ['GEMINI_API_KEY']
+
+# Configuration des secrets depuis Secret Manager
+availableSecrets:
+  secretManager:
+  - versionName: projects/$PROJECT_ID/secrets/gemini-api-key/versions/latest
+    env: 'GEMINI_API_KEY'
 
 images:
   - 'gcr.io/$PROJECT_ID/cv-booster-ai:$COMMIT_SHA'
