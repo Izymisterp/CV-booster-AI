@@ -1,5 +1,5 @@
-# Image de base avec Node.js 18 (version alpine pour un conteneur léger)
-FROM node:18-alpine
+# Image de base avec Node.js 20 (version alpine pour un conteneur léger)
+FROM node:20-alpine
 
 # Répertoire de travail
 WORKDIR /app
