@@ -13,6 +13,10 @@ RUN npm ci
 # Copie du reste du code source
 COPY . .
 
+# Argument de build pour la clé API (injectée au moment du build)
+ARG VITE_GEMINI_API_KEY
+ENV VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
+
 # Build de l'application Vite pour la production
 RUN npm run build
 

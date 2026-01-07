@@ -3,14 +3,14 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { AnalysisResult, FileData, RefinementData } from "../types";
 
 export const processApplication = async (
-  cvContent: string, 
-  jobDescription: string, 
+  cvContent: string,
+  jobDescription: string,
   refinement?: RefinementData,
   cvFile?: FileData,
   feedback?: string // Nouveau paramètre pour la regénération
 ): Promise<AnalysisResult> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
-  const model = "gemini-3-flash-preview";
+  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY || "" });
+  const model = "gemini-2.0-flash-exp";
 
   const isUrl = jobDescription.trim().startsWith('http');
 
@@ -48,10 +48,12 @@ export const processApplication = async (
   try {
     const response = await ai.models.generateContent({
       model,
-      contents: [{ parts: [
-        { text: prompt },
-        ...(cvFile ? [{ inlineData: { data: cvFile.data, mimeType: cvFile.mimeType } }] : [])
-      ]}],
+      contents: [{
+        parts: [
+          { text: prompt },
+          ...(cvFile ? [{ inlineData: { data: cvFile.data, mimeType: cvFile.mimeType } }] : [])
+        ]
+      }],
       config: {
         tools: isUrl ? [{ googleSearch: {} }] : undefined,
         responseMimeType: "application/json",
