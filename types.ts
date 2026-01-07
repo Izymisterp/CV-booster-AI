@@ -47,12 +47,12 @@ export interface StructuredCV {
   experiences: CVExperience[];
   education: CVEducation[];
   skills: string[];
-  languages?: string[];
 }
 
 export interface AnalysisResult {
   improvedCV: StructuredCV;
   coverLetter: string;
+  motivations: string[]; // Nouvelle section
   keywordsFound: string[];
   suggestions: string[];
 }

@@ -6,7 +6,8 @@ export const processApplication = async (
   cvContent: string, 
   jobDescription: string, 
   refinement?: RefinementData,
-  cvFile?: FileData
+  cvFile?: FileData,
+  feedback?: string // Nouveau paramètre pour la regénération
 ): Promise<AnalysisResult> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
   const model = "gemini-3-flash-preview";
@@ -14,36 +15,34 @@ export const processApplication = async (
   const isUrl = jobDescription.trim().startsWith('http');
 
   const refinementPrompt = refinement ? `
-    UTILISE PRIORITAIREMENT CES INFORMATIONS DE RAFFINEMENT :
-    - Nom Complet : ${refinement.fullName}
-    - Titre visé : ${refinement.professionalTitle}
-    - Email : ${refinement.email}
-    - Téléphone : ${refinement.phone}
-    - Ville/Région : ${refinement.location}
-    - Liens : LinkedIn (${refinement.links.linkedin}), Portfolio (${refinement.links.portfolio}), GitHub (${refinement.links.github})
-    - Expériences/Détails additionnels à intégrer : ${refinement.additionalExperience}
+    INFORMATIONS DE BASE :
+    - Nom : ${refinement.fullName}, Titre : ${refinement.professionalTitle}
+    - Contact : ${refinement.email}, ${refinement.phone}, ${refinement.location}
+    - Expériences additionnelles : ${refinement.additionalExperience}
   ` : "";
 
-  const jobContext = isUrl 
-    ? `L'offre d'emploi se trouve à cette URL : ${jobDescription}. Analyse le contenu de cette page pour extraire les prérequis, les missions et les compétences.`
-    : `Voici la description de l'offre : ${jobDescription}`;
+  const feedbackPrompt = feedback ? `
+    ATTENTION : L'utilisateur souhaite modifier le résultat précédent avec ce commentaire : "${feedback}". 
+    Applique ces changements prioritairement tout en gardant la cohérence avec l'offre.
+  ` : "";
 
   const prompt = `
-    En tant qu'expert en recrutement (HR Tech), analyse les documents fournis pour créer un dossier de candidature parfait.
+    En tant qu'expert en recrutement (HR Tech), analyse les documents pour créer un dossier de candidature parfait.
     
-    ${jobContext}
+    CONTEXTE DE L'OFFRE : ${isUrl ? "URL: " + jobDescription : jobDescription}
     
-    ${cvContent ? `CONTENU DU CV TEXTUEL :\n${cvContent}` : "Le CV est fourni sous forme de fichier joint."}
+    ${cvContent ? `CONTENU DU CV :\n${cvContent}` : "Le CV est fourni via le fichier joint."}
     
     ${refinementPrompt}
+    ${feedbackPrompt}
     
     TACHE :
-    1. Analyse le CV original et l'offre d'emploi (via le texte ou l'URL fournie).
-    2. Crée un CV optimisé et structuré pour l'offre. Améliore les titres, les descriptions et mets en avant les mots-clés de l'offre.
-    3. Rédige une lettre de motivation personnalisée intégrant les éléments de l'offre et les points forts du candidat.
-    4. Identifie les mots-clés stratégiques et donne 3 conseils d'entretien spécifiques à ce poste.
+    1. Crée un CV optimisé (improvedCV). Améliore les descriptions pour qu'elles soient percutantes et utilisent des verbes d'action.
+    2. Rédige une lettre de motivation (coverLetter) professionnelle et engageante.
+    3. Génère une liste de 4 "motivations" (motivations) : ce sont des arguments de vente que le candidat pourra utiliser en entretien pour expliquer pourquoi il veut CE poste précisément chez CETTE entreprise.
+    4. Identifie les mots-clés stratégiques (keywordsFound) et donne des conseils (suggestions).
 
-    IMPORTANT: Respecte strictement le schéma JSON. Utilise les informations de contact du raffinement en priorité.
+    IMPORTANT: Respecte strictement le schéma JSON. Langue : Français.
   `;
 
   try {
@@ -72,8 +71,6 @@ export const processApplication = async (
                     phone: { type: Type.STRING },
                     location: { type: Type.STRING },
                     linkedin: { type: Type.STRING },
-                    portfolio: { type: Type.STRING },
-                    github: { type: Type.STRING },
                   },
                   required: ["email", "phone", "location"]
                 },
@@ -107,10 +104,11 @@ export const processApplication = async (
               required: ["fullName", "professionalTitle", "summary", "contact", "experiences", "education", "skills"]
             },
             coverLetter: { type: Type.STRING },
+            motivations: { type: Type.ARRAY, items: { type: Type.STRING } },
             keywordsFound: { type: Type.ARRAY, items: { type: Type.STRING } },
             suggestions: { type: Type.ARRAY, items: { type: Type.STRING } },
           },
-          required: ["improvedCV", "coverLetter", "keywordsFound", "suggestions"],
+          required: ["improvedCV", "coverLetter", "motivations", "keywordsFound", "suggestions"],
         },
       },
     });
@@ -118,6 +116,6 @@ export const processApplication = async (
     return JSON.parse(response.text || "{}");
   } catch (error) {
     console.error("Gemini API Error:", error);
-    throw new Error("Erreur d'analyse. Si vous avez utilisé une URL, vérifiez qu'elle est accessible publiquement.");
+    throw new Error("Erreur d'analyse. Vérifiez vos entrées ou réessayez.");
   }
 };

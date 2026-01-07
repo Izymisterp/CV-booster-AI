@@ -30,13 +30,15 @@ const App: React.FC = () => {
     setStatus(AppStatus.REFINING);
   };
 
-  const handleFinalProcess = async () => {
+  const handleFinalProcess = async (feedback?: string) => {
     setStatus(AppStatus.PROCESSING);
     setError(null);
     try {
-      const data = await processApplication(cv, job, refinementData, cvFile || undefined);
+      const data = await processApplication(cv, job, refinementData, cvFile || undefined, feedback);
       setResult(data);
       setStatus(AppStatus.COMPLETED);
+      // On scroll en haut pour voir le résultat
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
       setError(err.message || "Une erreur est survenue");
       setStatus(AppStatus.ERROR);
@@ -63,8 +65,7 @@ const App: React.FC = () => {
   const handleNewJob = () => {
     setStatus(AppStatus.IDLE);
     setResult(null);
-    setJob(''); // On vide seulement l'offre
-    // Le CV et les données de raffinement sont conservés
+    setJob('');
   };
 
   const handleGoBack = () => {
@@ -88,8 +89,8 @@ const App: React.FC = () => {
             </div>
           </div>
           <nav className="hidden md:flex gap-6 text-sm font-semibold text-slate-600">
-            <button type="button" onClick={() => setActiveModal('guide')} className="hover:text-blue-600 transition-colors">Comment ça marche ?</button>
-            <button type="button" onClick={() => setActiveModal('guide')} className="hover:text-blue-600 transition-colors">Conseils RH</button>
+            <button type="button" onClick={() => setActiveModal('guide')} className="hover:text-blue-600 transition-colors">Guide Entretien</button>
+            <button type="button" onClick={() => setActiveModal('ats')} className="hover:text-blue-600 transition-colors">Optimisation ATS</button>
           </nav>
         </div>
       </header>
@@ -106,7 +107,7 @@ const App: React.FC = () => {
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">optimisez votre succès.</span>
             </h2>
             <p className="text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
-              Utilisez l'IA pour adapter votre parcours aux attentes précises des recruteurs. Téléchargez votre CV pour commencer.
+              Utilisez l'IA pour adapter votre parcours aux attentes précises des recruteurs.
             </p>
             
             {(cv || cvFile) && (
@@ -135,7 +136,7 @@ const App: React.FC = () => {
           <RefinementSection 
             data={refinementData}
             setData={setRefinementData}
-            onConfirm={handleFinalProcess}
+            onConfirm={() => handleFinalProcess()}
             onBack={handleGoBack}
           />
         )}
@@ -154,7 +155,12 @@ const App: React.FC = () => {
         )}
 
         {status === AppStatus.COMPLETED && result && (
-          <ResultsSection result={result} onReset={handleResetAll} onNewJob={handleNewJob} />
+          <ResultsSection 
+            result={result} 
+            onReset={handleResetAll} 
+            onNewJob={handleNewJob} 
+            onRegenerate={handleFinalProcess} 
+          />
         )}
 
         {status === AppStatus.PROCESSING && (
@@ -164,8 +170,8 @@ const App: React.FC = () => {
               <i className="fa-solid fa-brain text-blue-600 text-3xl absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"></i>
             </div>
             <div className="text-center">
-              <h3 className="text-xl font-bold text-slate-800">L'IA génère votre dossier final...</h3>
-              <p className="text-slate-500">Mise en page, rédaction de la lettre et optimisation sémantique en cours.</p>
+              <h3 className="text-xl font-bold text-slate-800">L'IA travaille sur votre dossier...</h3>
+              <p className="text-slate-500">Mise en page, rédaction et optimisation en cours.</p>
             </div>
           </div>
         )}
@@ -173,32 +179,16 @@ const App: React.FC = () => {
 
       {/* Footer */}
       <footer className="py-12 bg-white border-t border-slate-200 no-print">
-        <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-12">
-          <div className="col-span-1">
-            <div className="flex items-center gap-2 mb-4">
-               <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                 <i className="fa-solid fa-rocket text-white text-xs"></i>
-               </div>
-               <span className="font-bold text-lg text-slate-900">CV Booster AI</span>
-            </div>
-            <p className="text-slate-500 text-sm leading-relaxed">
-              La solution intelligente pour les chercheurs d'emploi modernes. Optimisé par les derniers modèles de langage pour un résultat professionnel.
-            </p>
+        <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-2">
+             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+               <i className="fa-solid fa-rocket text-white text-xs"></i>
+             </div>
+             <span className="font-bold text-lg text-slate-900">CV Booster AI</span>
           </div>
-          <div className="col-span-1">
-            <h4 className="font-bold mb-4 text-slate-900">Ressources</h4>
-            <ul className="text-slate-500 text-sm space-y-2 flex flex-col items-start">
-              <li><button type="button" onClick={() => setActiveModal('guide')} className="hover:text-blue-600 transition-colors text-left font-medium">Guide de l'entretien</button></li>
-              <li><button type="button" onClick={() => setActiveModal('ats')} className="hover:text-blue-600 transition-colors text-left font-medium">Mots-clés ATS</button></li>
-              <li><button type="button" onClick={() => setActiveModal('models')} className="hover:text-blue-600 transition-colors text-left font-medium">Modèles de CV</button></li>
-            </ul>
-          </div>
-          <div className="col-span-1">
-             <h4 className="font-bold mb-4 text-slate-900">Légal</h4>
-             <p className="text-xs text-slate-400">
-               © 2024 CV Booster AI. Vos données sont traitées uniquement pour la génération de vos documents et ne sont pas stockées.
-             </p>
-          </div>
+          <p className="text-xs text-slate-400">
+            © 2024 CV Booster AI. Vos données sont traitées en temps réel et ne sont pas stockées.
+          </p>
         </div>
       </footer>
     </div>

@@ -6,6 +6,7 @@ interface ResultsSectionProps {
   result: AnalysisResult;
   onReset: () => void;
   onNewJob: () => void;
+  onRegenerate: (feedback: string) => void;
 }
 
 const ResumeTemplate: React.FC<{ cv: StructuredCV }> = ({ cv }) => (
@@ -105,31 +106,36 @@ const ResumeTemplate: React.FC<{ cv: StructuredCV }> = ({ cv }) => (
         </div>
       </section>
       <footer className="mt-auto pt-6 border-t border-slate-50">
-        <p className="text-[8px] text-slate-300 italic text-center uppercase tracking-[0.2em]">Document généré par CV Booster AI</p>
+        <p className="text-[8px] text-slate-300 italic text-center uppercase tracking-[0.2em]">Optimisé par CV Booster AI</p>
       </footer>
     </div>
   </div>
 );
 
-export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, onReset, onNewJob }) => {
+export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, onReset, onNewJob, onRegenerate }) => {
   const [activeTab, setActiveTab] = useState<'cv' | 'letter'>('cv');
+  const [feedback, setFeedback] = useState('');
   const [isCopying, setIsCopying] = useState(false);
+
+  const handleAdjust = () => {
+    if (!feedback.trim()) return;
+    onRegenerate(feedback);
+    setFeedback('');
+  };
 
   const copyRichText = async (elementId: string) => {
     setIsCopying(true);
     const el = document.getElementById(elementId);
     if (!el) return;
-
     try {
       const type = "text/html";
       const blob = new Blob([el.innerHTML], { type });
       const data = [new ClipboardItem({ [type]: blob })];
       await navigator.clipboard.write(data);
-      alert("Formatage copié ! Vous pouvez maintenant coller directement dans Word ou Google Docs.");
+      alert("Formatage copié pour Word/Google Docs !");
     } catch (err) {
-      // Fallback au texte brut si ClipboardItem n'est pas supporté
       navigator.clipboard.writeText(el.innerText);
-      alert("Texte copié ! (Formatage simplifié)");
+      alert("Texte copié !");
     } finally {
       setIsCopying(false);
     }
@@ -140,10 +146,9 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, onReset,
     const content = document.getElementById(elementId);
     if (!content) return;
 
-    // Création d'une fenêtre popup pour l'impression (plus fiable dans les iframes)
-    const printWindow = window.open('', '_blank', 'width=900,height=1000');
+    const printWindow = window.open('', '_blank', 'width=1000,height=1200');
     if (!printWindow) {
-      alert("Le bloqueur de fenêtres surgissantes empêche l'impression. Veuillez l'autoriser ou utiliser le bouton de copie.");
+      alert("Bloqueur de popup détecté. Veuillez autoriser l'ouverture pour imprimer.");
       return;
     }
 
@@ -168,10 +173,7 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, onReset,
           </div>
           <script>
             window.onload = () => {
-              setTimeout(() => {
-                window.print();
-                // window.close(); // Optionnel : fermer après impression
-              }, 800);
+              setTimeout(() => { window.print(); }, 800);
             };
           </script>
         </body>
@@ -196,7 +198,7 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, onReset,
             className={`px-6 md:px-8 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'letter' ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-500 hover:text-slate-900'}`}
           >
             <i className="fa-solid fa-envelope-open-text mr-2"></i>
-            Lettre
+            Lettre & Motivations
           </button>
         </div>
         
@@ -207,7 +209,7 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, onReset,
             className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all shadow-sm"
           >
             <i className={`fa-solid ${isCopying ? 'fa-spinner animate-spin' : 'fa-copy'}`}></i>
-            Copier pour Word
+            Copier Word
           </button>
           
           <button 
@@ -215,12 +217,13 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, onReset,
             className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-black transition-all shadow-xl hover:scale-105 active:scale-95"
           >
             <i className="fa-solid fa-file-pdf"></i>
-            Exporter / Imprimer
+            Exporter PDF
           </button>
 
           <button
             onClick={onNewJob}
             className="px-6 py-3 rounded-xl font-bold text-sm bg-blue-50 text-blue-700 hover:bg-blue-100 transition-all shadow-sm flex items-center gap-2 border border-blue-100"
+            title="Garder le CV, changer d'offre"
           >
             <i className="fa-solid fa-rotate-left"></i>
             Autre offre
@@ -237,34 +240,79 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, onReset,
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-10">
-        <div className="lg:col-span-3 flex justify-center overflow-x-auto pb-8">
-          {activeTab === 'cv' ? (
-            <ResumeTemplate cv={result.improvedCV} />
-          ) : (
-            <div id="letter-printable" className="bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-100 p-10 md:p-16 max-w-[800px] w-full min-h-[1050px] relative font-serif print-container">
-              <div className="max-w-xl mx-auto">
-                <div className="text-right mb-16 text-sm text-slate-400 font-sans tracking-wide">
-                  Fait à {result.improvedCV.contact.location || 'Paris'}, le {new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                </div>
-                
-                <div className="mb-12">
-                  <p className="font-bold text-slate-900 mb-1 font-sans">{result.improvedCV.fullName}</p>
-                  <p className="text-sm text-slate-500 font-sans">{result.improvedCV.contact.email}</p>
-                  <p className="text-sm text-slate-500 font-sans">{result.improvedCV.contact.phone}</p>
-                </div>
+        <div className="lg:col-span-3 flex flex-col items-center gap-10">
+          <div className="overflow-x-auto w-full flex justify-center pb-4">
+            {activeTab === 'cv' ? (
+              <ResumeTemplate cv={result.improvedCV} />
+            ) : (
+              <div id="letter-printable" className="bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-100 p-10 md:p-16 max-w-[800px] w-full min-h-[1050px] relative font-serif print-container">
+                <div className="max-w-xl mx-auto">
+                  <div className="text-right mb-16 text-sm text-slate-400 font-sans tracking-wide">
+                    Fait à {result.improvedCV.contact.location || 'Paris'}, le {new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </div>
+                  
+                  <div className="mb-12">
+                    <p className="font-bold text-slate-900 mb-1 font-sans">{result.improvedCV.fullName}</p>
+                    <p className="text-sm text-slate-500 font-sans">{result.improvedCV.contact.email}</p>
+                    <p className="text-sm text-slate-500 font-sans">{result.improvedCV.contact.phone}</p>
+                  </div>
 
-                <div className="prose prose-slate max-w-none">
-                  <h2 className="text-xl font-black mb-10 text-slate-900 font-sans tracking-tight">Objet : Candidature au poste de {result.improvedCV.professionalTitle}</h2>
-                  <div className="whitespace-pre-wrap text-slate-700 leading-relaxed text-[15px]">
-                    {result.coverLetter}
+                  <div className="prose prose-slate max-w-none">
+                    <h2 className="text-xl font-black mb-10 text-slate-900 font-sans tracking-tight">Objet : Candidature au poste de {result.improvedCV.professionalTitle}</h2>
+                    <div className="whitespace-pre-wrap text-slate-700 leading-relaxed text-[15px]">
+                      {result.coverLetter}
+                    </div>
                   </div>
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* Module d'ajustement rapide */}
+          <div className="w-full max-w-[800px] bg-white p-6 rounded-2xl border border-slate-200 shadow-sm no-print">
+            <h4 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
+              <i className="fa-solid fa-wand-magic-sparkles text-blue-600"></i>
+              Ajuster le résultat avec l'IA
+            </h4>
+            <div className="flex gap-3">
+              <textarea
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                placeholder="Ex: 'Mets plus en avant mes compétences en management' ou 'Rends la lettre plus concise'..."
+                className="flex-grow p-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none h-20 shadow-inner"
+              />
+              <button
+                onClick={handleAdjust}
+                disabled={!feedback.trim()}
+                className="px-6 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Mettre à jour
+              </button>
             </div>
-          )}
+          </div>
         </div>
 
         <div className="lg:col-span-1 space-y-6 no-print">
+          {/* Nouveau Bloc Motivations */}
+          {activeTab === 'letter' && (
+            <div className="bg-indigo-900 p-6 rounded-2xl shadow-xl shadow-indigo-100 text-white animate-fadeIn">
+              <h3 className="font-bold flex items-center gap-2 mb-4 text-sm">
+                <i className="fa-solid fa-heart-pulse text-indigo-400"></i>
+                Mes potentielles motivations
+              </h3>
+              <p className="text-[10px] text-indigo-300 uppercase font-black tracking-widest mb-4">A utiliser en entretien</p>
+              <ul className="space-y-4">
+                {result.motivations.map((mot, i) => (
+                  <li key={i} className="text-[11px] leading-relaxed flex gap-3 opacity-90 p-3 bg-white/5 rounded-xl border border-white/10">
+                    <span className="text-indigo-400 font-black">{i + 1}.</span>
+                    {mot}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-6 text-[9px] text-indigo-300 italic opacity-70">Ces points clés sont basés sur le matching entre votre parcours et les valeurs de l'offre.</p>
+            </div>
+          )}
+
           <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm overflow-hidden relative">
             <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-full -mr-12 -mt-12"></div>
             <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4 text-sm relative">
