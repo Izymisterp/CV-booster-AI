@@ -13,8 +13,36 @@ const App: React.FC = () => {
   const [job, setJob] = useState('');
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [history, setHistory] = useState<AnalysisResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<ModalType>(null);
+  const [apiKeyError, setApiKeyError] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    // Vérification basique de la clé API
+    const apiKey = process.env.API_KEY;
+    if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
+      setApiKeyError(true);
+    }
+
+    // Charger les données sauvegardées
+    const savedCv = localStorage.getItem('cv_booster_cv');
+    const savedJob = localStorage.getItem('cv_booster_job');
+    const savedHistory = localStorage.getItem('cv_booster_history');
+    
+    if (savedCv) setCv(savedCv);
+    if (savedJob) setJob(savedJob);
+    if (savedHistory) {
+      try {
+        const parsed = JSON.parse(savedHistory);
+        if (Array.isArray(parsed)) {
+          setHistory(parsed);
+        }
+      } catch (e) {
+        console.error("Failed to parse history", e);
+      }
+    }
+  }, []);
 
   const [refinementData, setRefinementData] = useState<RefinementData>({
     fullName: '',
@@ -26,6 +54,19 @@ const App: React.FC = () => {
     additionalExperience: ''
   });
 
+  // Sauvegarder les données à chaque changement
+  React.useEffect(() => {
+    localStorage.setItem('cv_booster_cv', cv);
+  }, [cv]);
+
+  React.useEffect(() => {
+    localStorage.setItem('cv_booster_job', job);
+  }, [job]);
+
+  React.useEffect(() => {
+    localStorage.setItem('cv_booster_history', JSON.stringify(history));
+  }, [history]);
+
   const handleContinueToRefine = () => {
     setStatus(AppStatus.REFINING);
   };
@@ -35,12 +76,23 @@ const App: React.FC = () => {
     setError(null);
     try {
       const data = await processApplication(cv, job, refinementData, cvFile || undefined, feedback);
-      setResult(data);
+      
+      // Ajouter un ID et une date
+      const resultWithMeta = {
+        ...data,
+        id: crypto.randomUUID(),
+        createdAt: Date.now()
+      };
+      
+      setResult(resultWithMeta);
+      setHistory(prev => [resultWithMeta, ...prev]);
+      
       setStatus(AppStatus.COMPLETED);
       // On scroll en haut pour voir le résultat
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (err: any) {
-      setError(err.message || "Une erreur est survenue");
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Une erreur est survenue";
+      setError(errorMessage);
       setStatus(AppStatus.ERROR);
     }
   };
@@ -97,6 +149,16 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-grow container mx-auto px-6 py-12">
+        {apiKeyError && (
+          <div className="max-w-4xl mx-auto mb-8 p-4 bg-yellow-50 border border-yellow-200 rounded-xl flex items-center gap-3 text-yellow-800 animate-bounce-in">
+            <i className="fa-solid fa-key text-yellow-600"></i>
+            <div>
+              <p className="font-bold">Clé API manquante ou invalide</p>
+              <p className="text-sm">Veuillez configurer votre clé API Gemini dans le fichier <code className="bg-yellow-100 px-1 rounded">.env</code> pour utiliser l'application.</p>
+            </div>
+          </div>
+        )}
+
         {status === AppStatus.IDLE && (
           <div className="max-w-4xl mx-auto text-center mb-16 animate-fadeIn">
             <span className="px-4 py-1.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full uppercase tracking-wider mb-6 inline-block">
@@ -157,6 +219,8 @@ const App: React.FC = () => {
         {status === AppStatus.COMPLETED && result && (
           <ResultsSection 
             result={result} 
+            history={history}
+            onSelectHistory={(item) => setResult(item)}
             onReset={handleResetAll} 
             onNewJob={handleNewJob} 
             onRegenerate={handleFinalProcess} 

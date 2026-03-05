@@ -1,15 +1,22 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AnalysisResult, StructuredCV } from '../types';
+
+interface ResumeTemplateProps {
+  cv: StructuredCV;
+  hiddenIndices?: number[];
+  onToggle?: (index: number) => void;
+}
 
 interface ResultsSectionProps {
   result: AnalysisResult;
+  history?: AnalysisResult[];
+  onSelectHistory?: (item: AnalysisResult) => void;
   onReset: () => void;
   onNewJob: () => void;
   onRegenerate: (feedback: string) => void;
 }
 
-const ResumeTemplate: React.FC<{ cv: StructuredCV }> = ({ cv }) => (
+const ResumeTemplate: React.FC<ResumeTemplateProps> = ({ cv, hiddenIndices = [], onToggle }) => (
   <div className="bg-white text-slate-900 shadow-2xl mx-auto flex min-h-[1050px] print-container w-full max-w-[800px] overflow-hidden" id="cv-printable">
     {/* Left Column (Sidebar) */}
     <div className="w-[260px] md:w-[280px] bg-slate-900 text-white p-8 flex flex-col gap-10 shrink-0">
@@ -86,36 +93,97 @@ const ResumeTemplate: React.FC<{ cv: StructuredCV }> = ({ cv }) => (
           <div className="h-px bg-slate-100 w-full"></div>
         </div>
         <div className="space-y-8">
-          {cv.experiences.map((exp, i) => (
-            <div key={i} className="group relative">
-              <div className="flex flex-col md:flex-row md:items-baseline justify-between gap-1 mb-1">
-                <h4 className="font-black text-slate-900 text-[13px] uppercase tracking-tight">{exp.position}</h4>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{exp.period}</span>
+          {cv.experiences.map((exp, i) => {
+            const isHidden = hiddenIndices.includes(i);
+            return (
+              <div 
+                key={i} 
+                className={`group relative transition-all duration-300 ${isHidden ? 'opacity-30 grayscale' : ''}`}
+                data-html2canvas-ignore={isHidden ? "true" : undefined}
+              >
+                {onToggle && (
+                  <div className="absolute -left-8 top-1 no-print z-20 print:hidden opacity-0 group-hover:opacity-100 transition-opacity">
+                    <input
+                      type="checkbox"
+                      checked={!isHidden}
+                      onChange={() => onToggle(i)}
+                      className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer shadow-sm"
+                      title={isHidden ? "Inclure cette expérience dans le CV" : "Exclure cette expérience du CV"}
+                    />
+                  </div>
+                )}
+                
+                <div className="flex flex-col md:flex-row md:items-baseline justify-between gap-1 mb-1">
+                  <h4 className="font-black text-slate-900 text-[13px] uppercase tracking-tight">{exp.position}</h4>
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{exp.period}</span>
+                </div>
+                <p className="text-[10px] font-bold text-blue-600 mb-3 bg-blue-50 inline-block px-2 py-0.5 rounded uppercase tracking-wider">{exp.company}</p>
+                <ul className="space-y-2">
+                  {exp.description.map((desc, j) => (
+                    <li key={j} className="text-[11px] text-slate-600 leading-snug flex gap-2.5 items-start">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-200 mt-1 shrink-0"></span>
+                      <span>{desc}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <p className="text-[10px] font-bold text-blue-600 mb-3 bg-blue-50 inline-block px-2 py-0.5 rounded uppercase tracking-wider">{exp.company}</p>
-              <ul className="space-y-2">
-                {exp.description.map((desc, j) => (
-                  <li key={j} className="text-[11px] text-slate-600 leading-snug flex gap-2.5 items-start">
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-200 mt-1 shrink-0"></span>
-                    <span>{desc}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
-      <footer className="mt-auto pt-6 border-t border-slate-50">
-        <p className="text-[8px] text-slate-300 italic text-center uppercase tracking-[0.2em]">Optimisé par CV Booster AI</p>
-      </footer>
     </div>
   </div>
 );
 
-export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, onReset, onNewJob, onRegenerate }) => {
+export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, history, onSelectHistory, onReset, onNewJob, onRegenerate }) => {
   const [activeTab, setActiveTab] = useState<'cv' | 'letter'>('cv');
   const [feedback, setFeedback] = useState('');
   const [isCopying, setIsCopying] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [hiddenExperienceIndices, setHiddenExperienceIndices] = useState<number[]>([]);
+
+  useEffect(() => {
+    // Reset hidden items when result changes (e.g. loaded from history)
+    setHiddenExperienceIndices([]);
+  }, [result]);
+
+  const handleToggleExperience = (index: number) => {
+    setHiddenExperienceIndices(prev => 
+      prev.includes(index) 
+        ? prev.filter(i => i !== index) 
+        : [...prev, index]
+    );
+  };
+
+  const handleUpdateHidden = () => {
+    if (hiddenExperienceIndices.length === 0) return;
+    
+    // Create a detailed prompt describing which experiences were removed
+    const hiddenExperiences = hiddenExperienceIndices.map(index => {
+      const exp = result.improvedCV.experiences[index];
+      return `${exp.position} chez ${exp.company}`;
+    }).join(", ");
+
+    const prompt = `J'ai masqué les expériences suivantes : ${hiddenExperiences}. 
+    Peux-tu mettre à jour le CV (résumé, compétences, mise en page) pour qu'il soit cohérent sans ces expériences ? 
+    Adapte aussi la lettre de motivation si nécessaire.`;
+    
+    onRegenerate(prompt);
+    // Note: We keep hidden indices as is, or maybe we should reset them if the AI returns a new structure?
+    // Actually, if AI returns a new structure without those items, indices might shift.
+    // For now, let's assume user wants to REGENERATE a fresh version based on this constraint.
+  };
+
+  const handleImproveScore = () => {
+    const suggestionsText = result.suggestions.join('\n- ');
+    const prompt = `Le score ATS actuel est de ${result.atsScore || 'inconnu'}%. 
+    Pour l'améliorer, applique concrètement les corrections basées sur ces suggestions :
+    - ${suggestionsText}
+    
+    Optimise le CV pour dépasser les 80% de matching.`;
+    
+    onRegenerate(prompt);
+  };
 
   const handleAdjust = () => {
     if (!feedback.trim()) return;
@@ -141,49 +209,64 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, onReset,
     }
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     const elementId = activeTab === 'cv' ? 'cv-printable' : 'letter-printable';
     const content = document.getElementById(elementId);
     if (!content) return;
 
-    const printWindow = window.open('', '_blank', 'width=1000,height=1200');
-    if (!printWindow) {
-      alert("Bloqueur de popup détecté. Veuillez autoriser l'ouverture pour imprimer.");
-      return;
-    }
+    try {
+      // Apply compact mode for CV to fit on A4
+      if (activeTab === 'cv') {
+        content.classList.add('compact-mode');
+      }
 
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Impression - ${result.improvedCV.fullName}</title>
-          <script src="https://cdn.tailwindcss.com"></script>
-          <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-          <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-          <style>
-            body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background: white; }
-            @media print {
-              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-              .print-container { box-shadow: none !important; border: none !important; width: 100% !important; max-width: none !important; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="flex justify-center p-0">
-            ${content.innerHTML}
-          </div>
-          <script>
-            window.onload = () => {
-              setTimeout(() => { window.print(); }, 800);
-            };
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+      // @ts-ignore
+      const html2pdf = (await import('html2pdf.js')).default;
+      
+      // Use html2pdf for better rendering
+      const opt = {
+        margin: 0, // Zero margins
+        filename: `${activeTab === 'cv' ? 'CV' : 'Lettre'}_${result.improvedCV.fullName.replace(/\s+/g, '_')}.pdf`,
+        image: { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
+      };
+
+      await html2pdf().set(opt).from(content).save();
+    } catch (err) {
+      console.error("Erreur lors de la génération du PDF", err);
+      alert("Impossible de générer le PDF. Veuillez réessayer.");
+    } finally {
+      // Remove compact mode
+      if (activeTab === 'cv' && content) {
+        content.classList.remove('compact-mode');
+      }
+    }
   };
 
   return (
     <div className="animate-slideUp max-w-6xl mx-auto mb-20 px-4">
+      <style>{`
+        /* Styles pour le mode compact (export PDF A4) */
+        .compact-mode.print-container {
+          min-height: auto !important;
+          height: auto !important;
+          overflow: visible !important;
+        }
+        .compact-mode .gap-10 { gap: 1.5rem !important; }
+        .compact-mode .p-10 { padding: 1.5rem !important; }
+        .compact-mode .md\\:p-12 { padding: 1.5rem !important; }
+        .compact-mode .p-8 { padding: 1.5rem !important; }
+        .compact-mode .space-y-8 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem !important; }
+        .compact-mode .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.75rem !important; }
+        .compact-mode .space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.5rem !important; }
+        .compact-mode .mb-8 { margin-bottom: 1rem !important; }
+        .compact-mode .mb-4 { margin-bottom: 0.5rem !important; }
+        .compact-mode h1 { font-size: 1.5rem !important; } /* Reduce title size */
+        .compact-mode li { font-size: 9px !important; line-height: 1.2 !important; }
+        .compact-mode p { font-size: 10px !important; }
+        .compact-mode .text-\\[13px\\] { font-size: 11px !important; }
+      `}</style>
       <div className="flex flex-wrap gap-4 mb-10 no-print items-center justify-between">
         <div className="bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 flex">
           <button
@@ -201,6 +284,39 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, onReset,
             Lettre & Motivations
           </button>
         </div>
+
+        {history && history.length > 1 && (
+          <div className="relative z-10">
+            <button 
+              onClick={() => setShowHistory(!showHistory)}
+              className="px-4 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all shadow-sm flex items-center gap-2"
+            >
+              <i className="fa-solid fa-clock-rotate-left"></i>
+              Historique
+              <span className="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0.5 rounded-md">{history.length}</span>
+            </button>
+            
+            {showHistory && (
+              <div className="absolute top-full mt-2 right-0 w-64 bg-white rounded-xl shadow-xl border border-slate-100 p-2 max-h-80 overflow-y-auto">
+                {history.map((item, idx) => (
+                  <button
+                    key={item.id || idx}
+                    onClick={() => {
+                      onSelectHistory?.(item);
+                      setShowHistory(false);
+                    }}
+                    className={`w-full text-left p-3 rounded-lg text-xs hover:bg-slate-50 flex flex-col gap-1 ${result.id === item.id ? 'bg-blue-50 border border-blue-100' : ''}`}
+                  >
+                    <div className="font-bold text-slate-800">Version {history.length - idx}</div>
+                    <div className="text-slate-400">
+                      {item.createdAt ? new Date(item.createdAt).toLocaleTimeString() : 'Inconnue'}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         
         <div className="flex flex-wrap gap-2">
           <button 
@@ -243,7 +359,11 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, onReset,
         <div className="lg:col-span-3 flex flex-col items-center gap-10">
           <div className="overflow-x-auto w-full flex justify-center pb-4">
             {activeTab === 'cv' ? (
-              <ResumeTemplate cv={result.improvedCV} />
+              <ResumeTemplate 
+                cv={result.improvedCV} 
+                hiddenIndices={hiddenExperienceIndices}
+                onToggle={handleToggleExperience}
+              />
             ) : (
               <div id="letter-printable" className="bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-100 p-10 md:p-16 max-w-[800px] w-full min-h-[1050px] relative font-serif print-container">
                 <div className="max-w-xl mx-auto">
@@ -274,6 +394,26 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, onReset,
               <i className="fa-solid fa-wand-magic-sparkles text-blue-600"></i>
               Ajuster le résultat avec l'IA
             </h4>
+            
+            {hiddenExperienceIndices.length > 0 && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-center justify-between gap-4 animate-fadeIn">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-filter"></i>
+                  </div>
+                  <p className="text-xs text-amber-800 font-medium">
+                    Vous avez masqué {hiddenExperienceIndices.length} expérience(s). Voulez-vous regénérer le CV pour optimiser le reste du contenu ?
+                  </p>
+                </div>
+                <button
+                  onClick={handleUpdateHidden}
+                  className="px-4 py-2 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 transition-colors whitespace-nowrap shadow-sm"
+                >
+                  Actualiser le CV
+                </button>
+              </div>
+            )}
+
             <div className="flex gap-3">
               <textarea
                 value={feedback}
@@ -317,17 +457,45 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, onReset,
             <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-full -mr-12 -mt-12"></div>
             <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4 text-sm relative">
               <i className="fa-solid fa-bullseye text-blue-600"></i>
-              Score de Match
+              Score ATS / Match
             </h3>
             <div className="relative pt-1">
               <div className="flex mb-2 items-center justify-between">
                 <div><span className="text-[10px] font-black inline-block py-1 px-2 uppercase rounded bg-blue-100 text-blue-700">Pertinence</span></div>
-                <div className="text-right"><span className="text-sm font-black text-blue-600">95%</span></div>
+                <div className="text-right"><span className="text-sm font-black text-blue-600">{result.atsScore || 85}%</span></div>
               </div>
               <div className="overflow-hidden h-2.5 mb-4 text-xs flex rounded-full bg-slate-100">
-                <div style={{ width: "95%" }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-1000"></div>
+                <div style={{ width: `${result.atsScore || 85}%` }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-1000"></div>
               </div>
             </div>
+
+            {/* Low Score Warning */}
+            {typeof result.atsScore === 'number' && result.atsScore < 80 && (
+              <div className="mt-6 p-4 bg-orange-50 border border-orange-100 rounded-xl animate-fadeIn">
+                <h4 className="font-bold text-orange-800 mb-2 flex items-center gap-2 text-sm">
+                  <i className="fa-solid fa-triangle-exclamation"></i>
+                  Potentiel d'amélioration
+                </h4>
+                <p className="text-xs text-orange-700 mb-3 leading-relaxed">
+                  Score &lt; 80% détecté. Voici les points bloquants pour les ATS :
+                </p>
+                <ul className="mb-4 space-y-2">
+                  {result.suggestions.slice(0, 3).map((sug, i) => (
+                    <li key={i} className="text-[10px] text-orange-800 flex gap-2 items-start">
+                      <span className="mt-1 w-1 h-1 rounded-full bg-orange-400 shrink-0"></span>
+                      {sug}
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  onClick={handleImproveScore}
+                  className="w-full py-2 bg-orange-600 text-white text-[10px] font-bold rounded-lg hover:bg-orange-700 transition-colors shadow-sm flex items-center justify-center gap-2 uppercase tracking-wide"
+                >
+                  <i className="fa-solid fa-wand-magic-sparkles"></i>
+                  Optimiser pour viser 80%+
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">

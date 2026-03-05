@@ -50,6 +50,9 @@ export interface StructuredCV {
 }
 
 export interface AnalysisResult {
+  id?: string;
+  createdAt?: number;
+  atsScore?: number; // Score ATS (0-100)
   improvedCV: StructuredCV;
   coverLetter: string;
   motivations: string[]; // Nouvelle section

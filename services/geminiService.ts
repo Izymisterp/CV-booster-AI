@@ -41,6 +41,7 @@ export const processApplication = async (
     2. Rédige une lettre de motivation (coverLetter) professionnelle et engageante.
     3. Génère une liste de 4 "motivations" (motivations) : ce sont des arguments de vente que le candidat pourra utiliser en entretien pour expliquer pourquoi il veut CE poste précisément chez CETTE entreprise.
     4. Identifie les mots-clés stratégiques (keywordsFound) et donne des conseils (suggestions).
+    5. Calcule un score ATS (Applicant Tracking System) global sur 100 pour ce CV par rapport à l'offre (atsScore). Sois réaliste et sévère si nécessaire.
 
     IMPORTANT: Respecte strictement le schéma JSON. Langue : Français.
   `;
@@ -58,6 +59,7 @@ export const processApplication = async (
         responseSchema: {
           type: Type.OBJECT,
           properties: {
+            atsScore: { type: Type.INTEGER },
             improvedCV: {
               type: Type.OBJECT,
               properties: {
@@ -108,7 +110,7 @@ export const processApplication = async (
             keywordsFound: { type: Type.ARRAY, items: { type: Type.STRING } },
             suggestions: { type: Type.ARRAY, items: { type: Type.STRING } },
           },
-          required: ["improvedCV", "coverLetter", "motivations", "keywordsFound", "suggestions"],
+          required: ["improvedCV", "coverLetter", "motivations", "keywordsFound", "suggestions", "atsScore"],
         },
       },
     });
