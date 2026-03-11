@@ -19,6 +19,64 @@ const generateUUID = () => {
   });
 };
 
+const STORAGE_DB_NAME = 'cv_booster_ai';
+const STORAGE_STORE_NAME = 'kv';
+
+const getStorageDb = (() => {
+  let dbPromise: Promise<IDBDatabase> | null = null;
+  return () => {
+    if (dbPromise) return dbPromise;
+    if (typeof indexedDB === 'undefined') {
+      return Promise.reject(new Error('indexedDB unavailable'));
+    }
+    dbPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open(STORAGE_DB_NAME, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(STORAGE_STORE_NAME)) {
+          db.createObjectStore(STORAGE_STORE_NAME);
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error ?? new Error('indexedDB open failed'));
+    });
+    return dbPromise;
+  };
+})();
+
+const storageGet = async <T,>(key: string): Promise<T | null> => {
+  const db = await getStorageDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORAGE_STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORAGE_STORE_NAME);
+    const request = store.get(key);
+    request.onsuccess = () => resolve((request.result as T) ?? null);
+    request.onerror = () => reject(request.error ?? new Error('indexedDB get failed'));
+  });
+};
+
+const storageSet = async (key: string, value: unknown): Promise<void> => {
+  const db = await getStorageDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORAGE_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORAGE_STORE_NAME);
+    const request = store.put(value, key);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error ?? new Error('indexedDB put failed'));
+  });
+};
+
+const storageDel = async (key: string): Promise<void> => {
+  const db = await getStorageDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORAGE_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORAGE_STORE_NAME);
+    const request = store.delete(key);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error ?? new Error('indexedDB delete failed'));
+  });
+};
+
 const App: React.FC = () => {
   const [cv, setCv] = useState('');
   const [cvFile, setCvFile] = useState<FileData | null>(null);
@@ -28,16 +86,12 @@ const App: React.FC = () => {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [history, setHistory] = useState<AnalysisResult[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<ModalType>(null);
-  const [apiKeyError, setApiKeyError] = useState<boolean>(false);
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  const apiKeyMisconfigured = !apiKey || apiKey === 'YOUR_API_KEY_HERE' || apiKey === 'YOUR_GEMINI_API_KEY_HERE';
 
   React.useEffect(() => {
-    // Vérification basique de la clé API
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
-      setApiKeyError(true);
-    }
-
     // Charger les données sauvegardées
     const loadHistory = async () => {
       try {
@@ -45,13 +99,23 @@ const App: React.FC = () => {
         const dbHistory = await fetchApplications();
         if (dbHistory && dbHistory.length > 0) {
           setHistory(dbHistory);
+          storageSet('cv_booster_history', dbHistory).catch(() => {});
           return;
         }
       } catch (err) {
         console.warn("Impossible de charger l'historique Supabase, repli sur localStorage", err);
       }
 
-      // Repli sur localStorage si Supabase échoue ou est vide
+      try {
+        const idbHistory = await storageGet<AnalysisResult[]>('cv_booster_history');
+        if (Array.isArray(idbHistory) && idbHistory.length > 0) {
+          setHistory(idbHistory);
+          return;
+        }
+      } catch {
+      }
+
+      // Repli sur localStorage si Supabase/IndexedDB échoue ou est vide
       const savedHistory = localStorage.getItem('cv_booster_history');
       if (savedHistory) {
         try {
@@ -65,24 +129,39 @@ const App: React.FC = () => {
       }
     };
 
-    loadHistory();
-    
-    const savedCv = localStorage.getItem('cv_booster_cv');
-    const savedCvFile = localStorage.getItem('cv_booster_cv_file');
-    const savedJob = localStorage.getItem('cv_booster_job');
-    
-    if (savedCv) setCv(savedCv);
-    if (savedJob) setJob(savedJob);
-    if (savedCvFile) {
+    const loadAll = async () => {
+      await loadHistory();
+
+      const savedCv = localStorage.getItem('cv_booster_cv');
+      const savedJob = localStorage.getItem('cv_booster_job');
+
+      if (savedCv) setCv(savedCv);
+      if (savedJob) setJob(savedJob);
+
       try {
-        const parsedFile = JSON.parse(savedCvFile);
-        if (parsedFile && parsedFile.data && parsedFile.mimeType) {
-          setCvFile(parsedFile);
+        const idbCvFile = await storageGet<FileData>('cv_booster_cv_file');
+        if (idbCvFile && typeof idbCvFile.data === 'string' && typeof idbCvFile.mimeType === 'string' && typeof idbCvFile.name === 'string') {
+          setCvFile(idbCvFile);
+          return;
         }
-      } catch (e) {
-        console.error("Erreur parsing fichier CV sauvegardé", e);
+      } catch {
       }
-    }
+
+      const savedCvFile = localStorage.getItem('cv_booster_cv_file');
+      if (savedCvFile) {
+        try {
+          const parsedFile = JSON.parse(savedCvFile);
+          if (parsedFile && typeof parsedFile.data === 'string' && typeof parsedFile.mimeType === 'string' && typeof parsedFile.name === 'string') {
+            setCvFile(parsedFile);
+            storageSet('cv_booster_cv_file', parsedFile).catch(() => {});
+          }
+        } catch (e) {
+          console.error("Erreur parsing fichier CV sauvegardé", e);
+        }
+      }
+    };
+
+    loadAll().catch(() => {});
   }, []);
 
   const [refinementData, setRefinementData] = useState<RefinementData>({
@@ -102,12 +181,18 @@ const App: React.FC = () => {
   
   // Sauvegarder le fichier CV
   React.useEffect(() => {
-    if (cvFile) {
-      try {
-        localStorage.setItem('cv_booster_cv_file', JSON.stringify(cvFile));
-      } catch (e) {
-        console.warn("Fichier trop volumineux pour localStorage");
-      }
+    if (!cvFile) {
+      localStorage.removeItem('cv_booster_cv_file');
+      storageDel('cv_booster_cv_file').catch(() => {});
+      return;
+    }
+
+    storageSet('cv_booster_cv_file', cvFile).catch(() => {});
+
+    try {
+      localStorage.setItem('cv_booster_cv_file', JSON.stringify(cvFile));
+    } catch (e) {
+      console.warn("Fichier trop volumineux pour localStorage");
     }
   }, [cvFile]);
 
@@ -116,7 +201,11 @@ const App: React.FC = () => {
   }, [job]);
 
   React.useEffect(() => {
-    localStorage.setItem('cv_booster_history', JSON.stringify(history));
+    storageSet('cv_booster_history', history).catch(() => {});
+    try {
+      localStorage.setItem('cv_booster_history', JSON.stringify(history));
+    } catch {
+    }
   }, [history]);
 
   const handleContinueToRefine = () => {
@@ -126,6 +215,7 @@ const App: React.FC = () => {
   const handleFinalProcess = async (feedback?: string) => {
     setStatus(AppStatus.PROCESSING);
     setError(null);
+    setErrorDetails(null);
     try {
       const data = await processApplication(cv, job, refinementData, cvFile || undefined, feedback);
       
@@ -151,8 +241,34 @@ const App: React.FC = () => {
       // On scroll en haut pour voir le résultat
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: unknown) {
+      const sanitize = (input: string) => input
+        .replace(/AIza[0-9A-Za-z_-]{20,}/g, 'AIza…REDACTED')
+        .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, 'JWT…REDACTED');
+
+      const safeStringify = (value: unknown) => {
+        const seen = new WeakSet();
+        return JSON.stringify(value, (key, val) => {
+          if (typeof val === 'object' && val !== null) {
+            if (seen.has(val as object)) return '[Circular]';
+            seen.add(val as object);
+          }
+          if (typeof val === 'string') return sanitize(val);
+          return val;
+        }, 2);
+      };
+
       const errorMessage = err instanceof Error ? err.message : "Une erreur est survenue";
       setError(errorMessage);
+      if (import.meta.env.DEV) {
+        const e = err as any;
+        const pieces: string[] = [];
+        if (e?.name) pieces.push(`name: ${String(e.name)}`);
+        if (e?.message) pieces.push(`message: ${sanitize(String(e.message))}`);
+        if (e?.cause?.message) pieces.push(`cause: ${sanitize(String(e.cause.message))}`);
+        if (e?.stack) pieces.push(`stack:\n${sanitize(String(e.stack))}`);
+        if (pieces.length === 0) pieces.push(sanitize(safeStringify(err)));
+        setErrorDetails(pieces.join('\n\n').slice(0, 8000));
+      }
       setStatus(AppStatus.ERROR);
     }
   };
@@ -223,12 +339,23 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-grow container mx-auto px-6 py-12">
-        {apiKeyError && (
+        {apiKeyMisconfigured && (
           <div className="max-w-4xl mx-auto mb-8 p-4 bg-yellow-50 border border-yellow-200 rounded-xl flex items-center gap-3 text-yellow-800 animate-bounce-in">
             <i className="fa-solid fa-key text-yellow-600"></i>
             <div>
               <p className="font-bold">Clé API manquante ou invalide</p>
-              <p className="text-sm">Veuillez configurer votre clé API Gemini dans le fichier <code className="bg-yellow-100 px-1 rounded">.env</code> pour utiliser l'application.</p>
+              <p className="text-sm">
+                Vérifiez <code className="bg-yellow-100 px-1 rounded">VITE_GEMINI_API_KEY</code> dans <code className="bg-yellow-100 px-1 rounded">.env</code>, puis redémarrez le serveur (<code className="bg-yellow-100 px-1 rounded">Ctrl+C</code> puis <code className="bg-yellow-100 px-1 rounded">npm run dev</code>).
+              </p>
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 bg-white border border-yellow-200 rounded-lg text-sm font-bold hover:bg-yellow-100 transition-all"
+                >
+                  Recharger la page
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -357,6 +484,16 @@ const App: React.FC = () => {
             <div>
               <p className="font-bold">Oups ! Une erreur s'est produite.</p>
               <p className="text-sm mb-4">{error}</p>
+              {import.meta.env.DEV && errorDetails && (
+                <details className="mb-4">
+                  <summary className="cursor-pointer text-xs font-bold text-red-800">
+                    Détails techniques (dev)
+                  </summary>
+                  <pre className="mt-3 p-3 bg-white border border-red-200 rounded-lg text-[11px] leading-relaxed text-slate-800 whitespace-pre-wrap break-words">
+                    {errorDetails}
+                  </pre>
+                </details>
+              )}
               <button onClick={() => setStatus(AppStatus.IDLE)} className="px-4 py-2 bg-white border border-red-200 rounded-lg text-sm font-bold hover:bg-red-100 transition-all">
                 Réessayer
               </button>

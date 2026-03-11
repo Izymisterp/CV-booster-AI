@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { AnalysisResult, StructuredCV } from '../types';
 
+type ResumeTemplateId = 'sidebar' | 'bandeau' | 'ats' | 'modern';
+
 interface ResumeTemplateProps {
   cv: StructuredCV;
   hiddenIndices?: number[];
   hiddenCompactIndices?: number[];
   onToggle?: (index: number) => void;
   onToggleCompact?: (index: number) => void;
+  template: ResumeTemplateId;
 }
 
 interface ResultsSectionProps {
@@ -18,7 +21,7 @@ interface ResultsSectionProps {
   onRegenerate: (feedback: string) => void;
 }
 
-const ResumeTemplate: React.FC<ResumeTemplateProps> = ({ cv, hiddenIndices = [], hiddenCompactIndices = [], onToggle, onToggleCompact }) => (
+const ResumeTemplateSidebar: React.FC<Omit<ResumeTemplateProps, 'template'>> = ({ cv, hiddenIndices = [], hiddenCompactIndices = [], onToggle, onToggleCompact }) => (
   <div className="bg-white text-slate-900 shadow-2xl mx-auto flex min-h-[1050px] print-container w-full max-w-[800px] overflow-hidden" id="cv-printable">
     {/* Left Column (Sidebar) */}
     <div className="w-[260px] md:w-[280px] bg-slate-900 text-white p-8 flex flex-col gap-10 shrink-0">
@@ -178,8 +181,450 @@ const ResumeTemplate: React.FC<ResumeTemplateProps> = ({ cv, hiddenIndices = [],
   </div>
 );
 
+const ResumeTemplateBandeau: React.FC<Omit<ResumeTemplateProps, 'template'>> = ({ cv, hiddenIndices = [], hiddenCompactIndices = [], onToggle, onToggleCompact }) => (
+  <div className="bg-white text-slate-900 shadow-2xl mx-auto min-h-[1050px] print-container w-full max-w-[800px] overflow-hidden" id="cv-printable">
+    <div className="bg-gradient-to-br from-blue-800 to-sky-500 text-white px-10 py-8 text-center">
+      <h1 className="text-3xl font-black tracking-tight">{cv.fullName}</h1>
+      <div className="mt-2 text-sm font-semibold uppercase tracking-widest opacity-95">{cv.professionalTitle}</div>
+      <div className="mt-4 flex flex-wrap justify-center gap-x-5 gap-y-2 text-[11px] font-medium">
+        <span className="inline-flex items-center gap-2">
+          <i className="fa-solid fa-envelope"></i>
+          <span className="break-all">{cv.contact.email}</span>
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <i className="fa-solid fa-phone"></i>
+          <span>{cv.contact.phone}</span>
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <i className="fa-solid fa-location-dot"></i>
+          <span>{cv.contact.location}</span>
+        </span>
+        {cv.contact.linkedin && (
+          <span className="inline-flex items-center gap-2">
+            <i className="fa-brands fa-linkedin"></i>
+            <span className="break-all">{cv.contact.linkedin}</span>
+          </span>
+        )}
+        {cv.contact.portfolio && (
+          <span className="inline-flex items-center gap-2">
+            <i className="fa-solid fa-globe"></i>
+            <span className="break-all">{cv.contact.portfolio}</span>
+          </span>
+        )}
+        {cv.contact.github && (
+          <span className="inline-flex items-center gap-2">
+            <i className="fa-brands fa-github"></i>
+            <span className="break-all">{cv.contact.github}</span>
+          </span>
+        )}
+      </div>
+    </div>
+
+    <div className="p-10 md:p-12 flex flex-col gap-10">
+      <section className="bg-slate-50 border border-slate-100 rounded-2xl p-6">
+        <div className="border-l-4 border-blue-600 pl-5">
+          <h2 className="text-[12px] font-black uppercase tracking-[0.2em] text-blue-800">Profil Professionnel</h2>
+          <p className="mt-3 text-[12px] text-slate-700 leading-relaxed text-justify">{cv.summary}</p>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-[14px] font-black uppercase tracking-[0.18em] text-blue-900 border-b-2 border-blue-200 pb-2 mb-6">
+          Expériences Professionnelles
+        </h2>
+        <div className="space-y-6">
+          {cv.experiences.map((exp, i) => {
+            const isHidden = hiddenIndices.includes(i);
+            return (
+              <div
+                key={i}
+                className={`group relative pl-5 border-l-4 border-slate-200 ${isHidden ? 'opacity-30 grayscale' : ''}`}
+                data-html2canvas-ignore={isHidden ? "true" : undefined}
+              >
+                {onToggle && (
+                  <div className="absolute -left-8 top-1 no-print z-20 print:hidden opacity-0 group-hover:opacity-100 transition-opacity">
+                    <input
+                      type="checkbox"
+                      checked={!isHidden}
+                      onChange={() => onToggle(i)}
+                      className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer shadow-sm"
+                      title={isHidden ? "Inclure cette expérience dans le CV" : "Exclure cette expérience du CV"}
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-baseline justify-between gap-3">
+                  <div className="font-black text-blue-700 text-[13px]">{exp.position}</div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest shrink-0">{exp.period}</div>
+                </div>
+                <div className="mt-1 text-[11px] text-slate-600 italic">{exp.company}</div>
+                <ul className="mt-3 space-y-2">
+                  {exp.description.map((desc, j) => (
+                    <li key={j} className="text-[11px] text-slate-700 leading-snug flex gap-2.5 items-start">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-200 mt-1 shrink-0"></span>
+                      <span>{desc}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {cv.compactExperiences && cv.compactExperiences.length > 0 && (
+        <section className="pt-2">
+          <h2 className="text-[12px] font-black uppercase tracking-[0.18em] text-blue-900 border-b border-blue-200 pb-2 mb-4">
+            Autres expériences significatives
+          </h2>
+          <div className="grid grid-cols-1 gap-3">
+            {cv.compactExperiences.map((exp, i) => {
+              const isHidden = hiddenCompactIndices.includes(i);
+              return (
+                <div
+                  key={i}
+                  className={`group relative flex items-baseline justify-between border-b border-slate-100 pb-2 last:border-0 ${isHidden ? 'opacity-30 grayscale' : ''}`}
+                  data-html2canvas-ignore={isHidden ? "true" : undefined}
+                >
+                  {onToggleCompact && (
+                    <div className="absolute -left-8 top-1 no-print z-20 print:hidden opacity-0 group-hover:opacity-100 transition-opacity">
+                      <input
+                        type="checkbox"
+                        checked={!isHidden}
+                        onChange={() => onToggleCompact(i)}
+                        className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer shadow-sm"
+                        title={isHidden ? "Inclure cette expérience dans le CV" : "Exclure cette expérience du CV"}
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-3">
+                    <span className="font-bold text-slate-900 text-[11px] uppercase tracking-tight leading-tight">{exp.position}</span>
+                    <span className="hidden md:inline text-slate-300">•</span>
+                    <span className="text-[10px] text-blue-700 font-bold">{exp.company}</span>
+                  </div>
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest shrink-0 ml-4">{exp.period}</span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div>
+          <h2 className="text-[12px] font-black uppercase tracking-[0.18em] text-blue-900 border-b border-blue-200 pb-2 mb-4">
+            Compétences
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {cv.skills.map((skill, i) => (
+              <span key={i} className="px-2.5 py-1 bg-blue-50 text-blue-800 rounded-md text-[10px] font-bold">
+                {skill}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div>
+          <h2 className="text-[12px] font-black uppercase tracking-[0.18em] text-blue-900 border-b border-blue-200 pb-2 mb-4">
+            Formation
+          </h2>
+          <div className="space-y-4">
+            {cv.education.map((edu, i) => (
+              <div key={i} className="flex items-baseline justify-between gap-4">
+                <div>
+                  <div className="font-bold text-[11px] text-slate-900">{edu.degree}</div>
+                  <div className="text-[10px] text-slate-600">{edu.school}</div>
+                </div>
+                <div className="text-[10px] font-bold text-slate-500">{edu.year}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+);
+
+const ResumeTemplateAts: React.FC<Omit<ResumeTemplateProps, 'template'>> = ({ cv, hiddenIndices = [], hiddenCompactIndices = [], onToggle, onToggleCompact }) => (
+  <div className="bg-white text-slate-900 shadow-2xl mx-auto min-h-[1050px] print-container w-full max-w-[800px] p-10 md:p-12" id="cv-printable">
+    <div className="mb-8">
+      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight">{cv.fullName}</h1>
+          <div className="mt-1 text-sm font-bold text-slate-700 uppercase tracking-widest">{cv.professionalTitle}</div>
+        </div>
+        <div className="text-[11px] text-slate-700 leading-relaxed">
+          <div className="break-all">{cv.contact.email}</div>
+          <div>{cv.contact.phone} • {cv.contact.location}</div>
+          {cv.contact.linkedin && <div className="break-all">{cv.contact.linkedin}</div>}
+          {cv.contact.portfolio && <div className="break-all">{cv.contact.portfolio}</div>}
+          {cv.contact.github && <div className="break-all">{cv.contact.github}</div>}
+        </div>
+      </div>
+      <div className="mt-6 h-px bg-slate-200"></div>
+    </div>
+
+    <section className="mb-8">
+      <h2 className="text-[12px] font-black uppercase tracking-[0.25em] text-slate-500 mb-3">Profil</h2>
+      <p className="text-[12px] text-slate-800 leading-relaxed text-justify">{cv.summary}</p>
+    </section>
+
+    <section className="mb-8">
+      <h2 className="text-[12px] font-black uppercase tracking-[0.25em] text-slate-500 mb-4">Expériences</h2>
+      <div className="space-y-6">
+        {cv.experiences.map((exp, i) => {
+          const isHidden = hiddenIndices.includes(i);
+          return (
+            <div
+              key={i}
+              className={`group relative ${isHidden ? 'opacity-30 grayscale' : ''}`}
+              data-html2canvas-ignore={isHidden ? "true" : undefined}
+            >
+              {onToggle && (
+                <div className="absolute -left-8 top-1 no-print z-20 print:hidden opacity-0 group-hover:opacity-100 transition-opacity">
+                  <input
+                    type="checkbox"
+                    checked={!isHidden}
+                    onChange={() => onToggle(i)}
+                    className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer shadow-sm"
+                    title={isHidden ? "Inclure cette expérience dans le CV" : "Exclure cette expérience du CV"}
+                  />
+                </div>
+              )}
+
+              <div className="flex flex-col md:flex-row md:items-baseline md:justify-between gap-1">
+                <div className="font-black text-slate-900 text-[13px]">{exp.position} — {exp.company}</div>
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{exp.period}</div>
+              </div>
+              <ul className="mt-3 space-y-2">
+                {exp.description.map((desc, j) => (
+                  <li key={j} className="text-[11px] text-slate-700 leading-snug flex gap-2.5 items-start">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300 mt-1 shrink-0"></span>
+                    <span>{desc}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+
+    {cv.compactExperiences && cv.compactExperiences.length > 0 && (
+      <section className="mb-8">
+        <h2 className="text-[12px] font-black uppercase tracking-[0.25em] text-slate-500 mb-4">Autres expériences</h2>
+        <div className="grid grid-cols-1 gap-3">
+          {cv.compactExperiences.map((exp, i) => {
+            const isHidden = hiddenCompactIndices.includes(i);
+            return (
+              <div
+                key={i}
+                className={`group relative flex items-baseline justify-between border-b border-slate-100 pb-2 last:border-0 ${isHidden ? 'opacity-30 grayscale' : ''}`}
+                data-html2canvas-ignore={isHidden ? "true" : undefined}
+              >
+                {onToggleCompact && (
+                  <div className="absolute -left-8 top-1 no-print z-20 print:hidden opacity-0 group-hover:opacity-100 transition-opacity">
+                    <input
+                      type="checkbox"
+                      checked={!isHidden}
+                      onChange={() => onToggleCompact(i)}
+                      className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer shadow-sm"
+                      title={isHidden ? "Inclure cette expérience dans le CV" : "Exclure cette expérience du CV"}
+                    />
+                  </div>
+                )}
+
+                <div className="text-[11px] text-slate-800">
+                  <span className="font-bold">{exp.position}</span>
+                  <span className="text-slate-400"> • </span>
+                  <span>{exp.company}</span>
+                </div>
+                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest shrink-0 ml-4">{exp.period}</span>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    )}
+
+    <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div>
+        <h2 className="text-[12px] font-black uppercase tracking-[0.25em] text-slate-500 mb-3">Compétences</h2>
+        <div className="flex flex-wrap gap-2">
+          {cv.skills.map((skill, i) => (
+            <span key={i} className="px-2.5 py-1 border border-slate-200 rounded-md text-[10px] font-bold text-slate-800">
+              {skill}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div>
+        <h2 className="text-[12px] font-black uppercase tracking-[0.25em] text-slate-500 mb-3">Formation</h2>
+        <div className="space-y-4">
+          {cv.education.map((edu, i) => (
+            <div key={i} className="flex items-baseline justify-between gap-4">
+              <div>
+                <div className="font-bold text-[11px] text-slate-900">{edu.degree}</div>
+                <div className="text-[10px] text-slate-600">{edu.school}</div>
+              </div>
+              <div className="text-[10px] font-bold text-slate-500">{edu.year}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  </div>
+);
+
+const ResumeTemplateModern: React.FC<Omit<ResumeTemplateProps, 'template'>> = ({ cv, hiddenIndices = [], hiddenCompactIndices = [], onToggle, onToggleCompact }) => (
+  <div className="bg-white text-slate-900 shadow-2xl mx-auto flex min-h-[1050px] print-container w-full max-w-[800px] overflow-hidden" id="cv-printable">
+    <div className="w-[220px] md:w-[240px] bg-slate-50 border-r border-slate-100 p-8 flex flex-col gap-8 shrink-0">
+      <div>
+        <h1 className="text-2xl font-black tracking-tight">{cv.fullName}</h1>
+        <div className="mt-2 text-[11px] font-bold text-slate-600 uppercase tracking-widest">{cv.professionalTitle}</div>
+      </div>
+      <div>
+        <div className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 mb-3">Contact</div>
+        <div className="text-[11px] text-slate-700 space-y-2">
+          <div className="break-all">{cv.contact.email}</div>
+          <div>{cv.contact.phone}</div>
+          <div>{cv.contact.location}</div>
+          {cv.contact.linkedin && <div className="break-all">{cv.contact.linkedin}</div>}
+          {cv.contact.portfolio && <div className="break-all">{cv.contact.portfolio}</div>}
+          {cv.contact.github && <div className="break-all">{cv.contact.github}</div>}
+        </div>
+      </div>
+      <div>
+        <div className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 mb-3">Compétences</div>
+        <div className="flex flex-wrap gap-2">
+          {cv.skills.map((skill, i) => (
+            <span key={i} className="px-2 py-1 bg-white border border-slate-200 rounded-md text-[10px] font-bold text-slate-800">
+              {skill}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 mb-3">Formation</div>
+        <div className="space-y-4">
+          {cv.education.map((edu, i) => (
+            <div key={i}>
+              <div className="font-bold text-[11px] text-slate-900">{edu.degree}</div>
+              <div className="text-[10px] text-slate-600">{edu.school}</div>
+              <div className="text-[10px] font-bold text-slate-500">{edu.year}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    <div className="flex-grow p-10 md:p-12 flex flex-col gap-10">
+      <section>
+        <div className="flex items-center gap-4 mb-4">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 whitespace-nowrap">Profil</h3>
+          <div className="h-px bg-slate-100 w-full"></div>
+        </div>
+        <p className="text-[12px] text-slate-700 leading-relaxed text-justify">{cv.summary}</p>
+      </section>
+
+      <section className="flex-grow">
+        <div className="flex items-center gap-4 mb-6">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 whitespace-nowrap">Expériences</h3>
+          <div className="h-px bg-slate-100 w-full"></div>
+        </div>
+        <div className="space-y-7">
+          {cv.experiences.map((exp, i) => {
+            const isHidden = hiddenIndices.includes(i);
+            return (
+              <div
+                key={i}
+                className={`group relative ${isHidden ? 'opacity-30 grayscale' : ''}`}
+                data-html2canvas-ignore={isHidden ? "true" : undefined}
+              >
+                {onToggle && (
+                  <div className="absolute -left-8 top-1 no-print z-20 print:hidden opacity-0 group-hover:opacity-100 transition-opacity">
+                    <input
+                      type="checkbox"
+                      checked={!isHidden}
+                      onChange={() => onToggle(i)}
+                      className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer shadow-sm"
+                      title={isHidden ? "Inclure cette expérience dans le CV" : "Exclure cette expérience du CV"}
+                    />
+                  </div>
+                )}
+
+                <div className="flex flex-col md:flex-row md:items-baseline justify-between gap-1 mb-1">
+                  <h4 className="font-black text-slate-900 text-[13px] uppercase tracking-tight">{exp.position}</h4>
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{exp.period}</span>
+                </div>
+                <p className="text-[10px] font-bold text-blue-700 mb-3 bg-blue-50 inline-block px-2 py-0.5 rounded uppercase tracking-wider">{exp.company}</p>
+                <ul className="space-y-2">
+                  {exp.description.map((desc, j) => (
+                    <li key={j} className="text-[11px] text-slate-700 leading-snug flex gap-2.5 items-start">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-200 mt-1 shrink-0"></span>
+                      <span>{desc}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+
+        {cv.compactExperiences && cv.compactExperiences.length > 0 && (
+          <div className="mt-8 pt-8 border-t border-slate-100">
+            <div className="flex items-center gap-4 mb-6">
+              <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 whitespace-nowrap">Autres expériences</h3>
+              <div className="h-px bg-slate-100 w-full"></div>
+            </div>
+            <div className="grid grid-cols-1 gap-3">
+              {cv.compactExperiences.map((exp, i) => {
+                const isHidden = hiddenCompactIndices.includes(i);
+                return (
+                  <div
+                    key={i}
+                    className={`group relative flex items-baseline justify-between border-b border-slate-50 pb-2 last:border-0 ${isHidden ? 'opacity-30 grayscale' : ''}`}
+                    data-html2canvas-ignore={isHidden ? "true" : undefined}
+                  >
+                    {onToggleCompact && (
+                      <div className="absolute -left-8 top-1 no-print z-20 print:hidden opacity-0 group-hover:opacity-100 transition-opacity">
+                        <input
+                          type="checkbox"
+                          checked={!isHidden}
+                          onChange={() => onToggleCompact(i)}
+                          className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer shadow-sm"
+                          title={isHidden ? "Inclure cette expérience dans le CV" : "Exclure cette expérience du CV"}
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-3">
+                      <h4 className="font-bold text-slate-900 text-[11px] uppercase tracking-tight leading-tight">{exp.position}</h4>
+                      <span className="hidden md:inline text-slate-300">•</span>
+                      <span className="text-[10px] text-blue-700 font-bold">{exp.company}</span>
+                    </div>
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0 ml-4">{exp.period}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </section>
+    </div>
+  </div>
+);
+
+const ResumeTemplate: React.FC<ResumeTemplateProps> = ({ template, ...props }) => {
+  if (template === 'bandeau') return <ResumeTemplateBandeau {...props} />;
+  if (template === 'ats') return <ResumeTemplateAts {...props} />;
+  if (template === 'modern') return <ResumeTemplateModern {...props} />;
+  return <ResumeTemplateSidebar {...props} />;
+};
+
 export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, history, onSelectHistory, onReset, onNewJob, onRegenerate }) => {
   const [activeTab, setActiveTab] = useState<'cv' | 'letter'>('cv');
+  const [cvTemplate, setCvTemplate] = useState<ResumeTemplateId>('sidebar');
   const [feedback, setFeedback] = useState('');
   const [isCopying, setIsCopying] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -385,7 +830,22 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, history,
           </div>
         )}
         
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          {activeTab === 'cv' && (
+            <div className="flex items-center gap-2 px-4 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold text-sm shadow-sm">
+              <i className="fa-solid fa-layer-group text-slate-400"></i>
+              <select
+                value={cvTemplate}
+                onChange={(e) => setCvTemplate(e.target.value as ResumeTemplateId)}
+                className="bg-transparent outline-none text-sm font-bold cursor-pointer"
+              >
+                <option value="sidebar">Sidebar</option>
+                <option value="bandeau">Bandeau</option>
+                <option value="ats">ATS Simple</option>
+                <option value="modern">Moderne</option>
+              </select>
+            </div>
+          )}
           <button 
             onClick={() => copyRichText(activeTab === 'cv' ? 'cv-printable' : 'letter-printable')}
             disabled={isCopying}
@@ -432,6 +892,7 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, history,
                 hiddenCompactIndices={hiddenCompactIndices}
                 onToggle={handleToggleExperience}
                 onToggleCompact={toggleCompact}
+                template={cvTemplate}
               />
             ) : (
               <div id="letter-printable" className="bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-100 p-10 md:p-16 max-w-[800px] w-full min-h-[1050px] relative font-serif print-container">
