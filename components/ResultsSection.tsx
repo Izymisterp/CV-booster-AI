@@ -4,7 +4,9 @@ import { AnalysisResult, StructuredCV } from '../types';
 interface ResumeTemplateProps {
   cv: StructuredCV;
   hiddenIndices?: number[];
+  hiddenCompactIndices?: number[];
   onToggle?: (index: number) => void;
+  onToggleCompact?: (index: number) => void;
 }
 
 interface ResultsSectionProps {
@@ -16,7 +18,7 @@ interface ResultsSectionProps {
   onRegenerate: (feedback: string) => void;
 }
 
-const ResumeTemplate: React.FC<ResumeTemplateProps> = ({ cv, hiddenIndices = [], onToggle }) => (
+const ResumeTemplate: React.FC<ResumeTemplateProps> = ({ cv, hiddenIndices = [], hiddenCompactIndices = [], onToggle, onToggleCompact }) => (
   <div className="bg-white text-slate-900 shadow-2xl mx-auto flex min-h-[1050px] print-container w-full max-w-[800px] overflow-hidden" id="cv-printable">
     {/* Left Column (Sidebar) */}
     <div className="w-[260px] md:w-[280px] bg-slate-900 text-white p-8 flex flex-col gap-10 shrink-0">
@@ -130,6 +132,47 @@ const ResumeTemplate: React.FC<ResumeTemplateProps> = ({ cv, hiddenIndices = [],
             );
           })}
         </div>
+        
+        {/* Compact Experiences */}
+        {cv.compactExperiences && cv.compactExperiences.length > 0 && (
+          <div className="mt-8 pt-8 border-t border-slate-100">
+             <div className="flex items-center gap-4 mb-6">
+              <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 whitespace-nowrap">Autres expériences significatives</h3>
+              <div className="h-px bg-slate-100 w-full"></div>
+            </div>
+            <div className="grid grid-cols-1 gap-3">
+              {cv.compactExperiences.map((exp, i) => {
+                const isHidden = hiddenCompactIndices.includes(i);
+                return (
+                  <div 
+                    key={i} 
+                    className={`group relative flex items-baseline justify-between border-b border-slate-50 pb-2 last:border-0 transition-all duration-300 ${isHidden ? 'opacity-30 grayscale' : ''}`}
+                    data-html2canvas-ignore={isHidden ? "true" : undefined}
+                  >
+                    {onToggleCompact && (
+                      <div className="absolute -left-8 top-1 no-print z-20 print:hidden opacity-0 group-hover:opacity-100 transition-opacity">
+                        <input
+                          type="checkbox"
+                          checked={!isHidden}
+                          onChange={() => onToggleCompact(i)}
+                          className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer shadow-sm"
+                          title={isHidden ? "Inclure cette expérience dans le CV" : "Exclure cette expérience du CV"}
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-3">
+                      <h4 className="font-bold text-slate-900 text-[11px] uppercase tracking-tight leading-tight">{exp.position}</h4>
+                      <span className="hidden md:inline text-slate-300">•</span>
+                      <span className="text-[10px] text-blue-600 font-bold">{exp.company}</span>
+                    </div>
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0 ml-4">{exp.period}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </section>
     </div>
   </div>
@@ -155,23 +198,47 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, history,
     );
   };
 
+  const handleToggleCompactExperience = (index: number) => {
+    // Note: Pour l'instant, on n'a pas besoin de stocker l'état "masqué" pour les expériences compactes
+    // car elles sont déjà "secondaires". Mais on pourrait vouloir les supprimer complètement.
+    // Ajoutons simplement la logique si besoin plus tard ou une simple suppression visuelle.
+    // Ici, on va réutiliser le même tableau hiddenExperienceIndices mais avec un offset pour les distinguer ?
+    // Non, utilisons un state séparé pour la clarté.
+  };
+  const [hiddenCompactIndices, setHiddenCompactIndices] = useState<number[]>([]);
+
+  const toggleCompact = (index: number) => {
+    setHiddenCompactIndices(prev => 
+      prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+    );
+  };
+  
+  // Reset quand le résultat change
+  useEffect(() => {
+    setHiddenCompactIndices([]);
+  }, [result]);
+
   const handleUpdateHidden = () => {
-    if (hiddenExperienceIndices.length === 0) return;
+    if (hiddenExperienceIndices.length === 0 && hiddenCompactIndices.length === 0) return;
     
     // Create a detailed prompt describing which experiences were removed
     const hiddenExperiences = hiddenExperienceIndices.map(index => {
       const exp = result.improvedCV.experiences[index];
       return `${exp.position} chez ${exp.company}`;
-    }).join(", ");
+    });
 
-    const prompt = `J'ai masqué les expériences suivantes : ${hiddenExperiences}. 
+    const hiddenCompact = hiddenCompactIndices.map(index => {
+       const exp = result.improvedCV.compactExperiences?.[index];
+       return exp ? `${exp.position} chez ${exp.company} (secondaire)` : '';
+    }).filter(Boolean);
+
+    const allHidden = [...hiddenExperiences, ...hiddenCompact].join(", ");
+
+    const prompt = `J'ai masqué les expériences suivantes : ${allHidden}. 
     Peux-tu mettre à jour le CV (résumé, compétences, mise en page) pour qu'il soit cohérent sans ces expériences ? 
     Adapte aussi la lettre de motivation si nécessaire.`;
     
     onRegenerate(prompt);
-    // Note: We keep hidden indices as is, or maybe we should reset them if the AI returns a new structure?
-    // Actually, if AI returns a new structure without those items, indices might shift.
-    // For now, let's assume user wants to REGENERATE a fresh version based on this constraint.
   };
 
   const handleImproveScore = () => {
@@ -362,7 +429,9 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, history,
               <ResumeTemplate 
                 cv={result.improvedCV} 
                 hiddenIndices={hiddenExperienceIndices}
+                hiddenCompactIndices={hiddenCompactIndices}
                 onToggle={handleToggleExperience}
+                onToggleCompact={toggleCompact}
               />
             ) : (
               <div id="letter-printable" className="bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-100 p-10 md:p-16 max-w-[800px] w-full min-h-[1050px] relative font-serif print-container">
@@ -395,14 +464,14 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result, history,
               Ajuster le résultat avec l'IA
             </h4>
             
-            {hiddenExperienceIndices.length > 0 && (
+            {(hiddenExperienceIndices.length > 0 || hiddenCompactIndices.length > 0) && (
               <div className="mb-4 p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-center justify-between gap-4 animate-fadeIn">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
                     <i className="fa-solid fa-filter"></i>
                   </div>
                   <p className="text-xs text-amber-800 font-medium">
-                    Vous avez masqué {hiddenExperienceIndices.length} expérience(s). Voulez-vous regénérer le CV pour optimiser le reste du contenu ?
+                    Vous avez masqué {hiddenExperienceIndices.length + hiddenCompactIndices.length} expérience(s). Voulez-vous regénérer le CV pour optimiser le reste du contenu ?
                   </p>
                 </div>
                 <button

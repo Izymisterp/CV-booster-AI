@@ -26,6 +26,12 @@ export interface CVExperience {
   description: string[];
 }
 
+export interface CVCompactExperience {
+  company: string;
+  position: string;
+  period: string;
+}
+
 export interface CVEducation {
   school: string;
   degree: string;
@@ -45,6 +51,7 @@ export interface StructuredCV {
     github?: string;
   };
   experiences: CVExperience[];
+  compactExperiences?: CVCompactExperience[]; // Nouvelles expériences condensées
   education: CVEducation[];
   skills: string[];
 }
@@ -52,6 +59,8 @@ export interface StructuredCV {
 export interface AnalysisResult {
   id?: string;
   createdAt?: number;
+  originalCVContent?: string;
+  originalJobDescription?: string;
   atsScore?: number; // Score ATS (0-100)
   improvedCV: StructuredCV;
   coverLetter: string;

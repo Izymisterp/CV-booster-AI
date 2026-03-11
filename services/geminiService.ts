@@ -9,8 +9,14 @@ export const processApplication = async (
   cvFile?: FileData,
   feedback?: string // Nouveau paramètre pour la regénération
 ): Promise<AnalysisResult> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
-  const model = "gemini-3-flash-preview";
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Clé API Gemini manquante. Vérifiez votre fichier .env.");
+  }
+  const ai = new GoogleGenAI({ apiKey });
+  // Le modèle "gemini-1.5-flash" peut être déprécié ou non disponible selon la région/version.
+  // "gemini-2.0-flash" est la version la plus récente et performante.
+  const model = "gemini-2.0-flash";
 
   const isUrl = jobDescription.trim().startsWith('http');
 
@@ -38,10 +44,11 @@ export const processApplication = async (
     
     TACHE :
     1. Crée un CV optimisé (improvedCV). Améliore les descriptions pour qu'elles soient percutantes et utilisent des verbes d'action.
-    2. Rédige une lettre de motivation (coverLetter) professionnelle et engageante.
-    3. Génère une liste de 4 "motivations" (motivations) : ce sont des arguments de vente que le candidat pourra utiliser en entretien pour expliquer pourquoi il veut CE poste précisément chez CETTE entreprise.
-    4. Identifie les mots-clés stratégiques (keywordsFound) et donne des conseils (suggestions).
-    5. Calcule un score ATS (Applicant Tracking System) global sur 100 pour ce CV par rapport à l'offre (atsScore). Sois réaliste et sévère si nécessaire.
+    2. Identifie les expériences moins cruciales mais qui montrent une continuité ou des compétences transférables, et place-les dans une section séparée (compactExperiences) SANS description détaillée (juste titre, entreprise, dates). Garde les plus importantes dans 'experiences'.
+    3. Rédige une lettre de motivation (coverLetter) professionnelle mais HUMAINE et AUTHENTIQUE. Évite le jargon robotique ("Je suis ravi de postuler...", "Dynamique et motivé..."). Parle avec sincérité, comme un humain qui s'adresse à un autre humain, en montrant pourquoi ce poste fait sens dans le parcours.
+    4. Génère une liste de 4 "motivations" (motivations) : ce sont des arguments de vente que le candidat pourra utiliser en entretien pour expliquer pourquoi il veut CE poste précisément chez CETTE entreprise.
+    5. Identifie les mots-clés stratégiques (keywordsFound) et donne des conseils (suggestions).
+    6. Calcule un score ATS (Applicant Tracking System) global sur 100 pour ce CV par rapport à l'offre (atsScore). Sois réaliste et sévère si nécessaire.
 
     IMPORTANT: Respecte strictement le schéma JSON. Langue : Français.
   `;
@@ -89,6 +96,18 @@ export const processApplication = async (
                     required: ["company", "position", "period", "description"]
                   }
                 },
+                compactExperiences: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      company: { type: Type.STRING },
+                      position: { type: Type.STRING },
+                      period: { type: Type.STRING },
+                    },
+                    required: ["company", "position", "period"]
+                  }
+                },
                 education: {
                   type: Type.ARRAY,
                   items: {
@@ -116,8 +135,9 @@ export const processApplication = async (
     });
 
     return JSON.parse(response.text || "{}");
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini API Error:", error);
-    throw new Error("Erreur d'analyse. Vérifiez vos entrées ou réessayez.");
+    const detail = error?.message || JSON.stringify(error);
+    throw new Error(`Erreur d'analyse (${detail}). Vérifiez votre clé API et votre connexion.`);
   }
 };

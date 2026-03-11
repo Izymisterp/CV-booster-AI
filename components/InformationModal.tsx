@@ -1,7 +1,9 @@
 
 import React from 'react';
 
-export type ModalType = 'guide' | 'ats' | 'models' | null;
+import { AnalysisResult } from '../types';
+
+export type ModalType = 'guide' | 'ats' | 'models' | { type: 'details', data: AnalysisResult } | null;
 
 interface InformationModalProps {
   type: ModalType;
@@ -70,7 +72,99 @@ const content = {
 
 export const InformationModal: React.FC<InformationModalProps> = ({ type, onClose }) => {
   if (!type) return null;
-  const data = content[type];
+
+  // Cas spécial pour les détails d'historique
+  if (typeof type === 'object' && type.type === 'details') {
+    const { data } = type;
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-fadeIn">
+        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}></div>
+        <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl relative z-10 overflow-hidden animate-scaleUp max-h-[90vh] flex flex-col">
+          <div className="p-6 bg-slate-900 text-white flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                <i className="fa-solid fa-database text-xl"></i>
+              </div>
+              <div>
+                <h2 className="text-xl font-black">Détails de la candidature</h2>
+                <p className="text-xs text-slate-400 opacity-80">Sauvegardé le {data.createdAt ? new Date(data.createdAt).toLocaleDateString() : 'Date inconnue'}</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="w-8 h-8 hover:bg-white/10 rounded-full transition-colors flex items-center justify-center">
+              <i className="fa-solid fa-xmark text-lg"></i>
+            </button>
+          </div>
+          
+          <div className="flex-grow overflow-y-auto p-8 space-y-8 bg-slate-50">
+            <div className="grid md:grid-cols-2 gap-8">
+              {/* Colonne Gauche : Entrées */}
+              <div className="space-y-6">
+                <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs border-b border-slate-200 pb-2 mb-4">Données Originales</h3>
+                
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                  <h4 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
+                    <i className="fa-solid fa-file-lines text-blue-600"></i>
+                    CV Original
+                  </h4>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-600 font-mono max-h-40 overflow-y-auto whitespace-pre-wrap">
+                    {data.originalCVContent || "Contenu non disponible (fichier uploadé ?)"}
+                  </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                  <h4 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
+                    <i className="fa-solid fa-briefcase text-blue-600"></i>
+                    Annonce / Poste
+                  </h4>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-600 font-mono max-h-40 overflow-y-auto whitespace-pre-wrap">
+                    {data.originalJobDescription || "Non spécifié"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Colonne Droite : Sorties */}
+              <div className="space-y-6">
+                <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs border-b border-slate-200 pb-2 mb-4">Résultats Générés</h3>
+
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                  <h4 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
+                    <i className="fa-solid fa-wand-magic-sparkles text-indigo-600"></i>
+                    CV Optimisé
+                  </h4>
+                  <div className="space-y-2">
+                    <p className="text-sm"><span className="font-bold text-slate-700">Titre :</span> {data.improvedCV.professionalTitle}</p>
+                    <p className="text-sm"><span className="font-bold text-slate-700">Expériences :</span> {data.improvedCV.experiences.length}</p>
+                    <p className="text-sm"><span className="font-bold text-slate-700">Compétences :</span> {data.improvedCV.skills.length}</p>
+                  </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                  <h4 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
+                    <i className="fa-solid fa-envelope-open-text text-indigo-600"></i>
+                    Lettre de motivation
+                  </h4>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-600 font-serif italic max-h-40 overflow-y-auto whitespace-pre-wrap">
+                    {data.coverLetter}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 bg-white border-t border-slate-200 flex justify-end shrink-0">
+            <button 
+              onClick={onClose}
+              className="px-6 py-2 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition-all text-sm"
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const data = content[type as 'guide' | 'ats' | 'models']; // Cast sûr car on a traité le cas object avant
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-fadeIn">

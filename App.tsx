@@ -6,12 +6,25 @@ import { RefinementSection } from './components/RefinementSection';
 import { InformationModal, ModalType } from './components/InformationModal';
 import { AppStatus, AnalysisResult, FileData, RefinementData } from './types';
 import { processApplication } from './services/geminiService';
+import { fetchApplications, saveApplication } from './services/dbService';
+
+// Utilitaire pour générer un UUID compatible
+const generateUUID = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
 
 const App: React.FC = () => {
   const [cv, setCv] = useState('');
   const [cvFile, setCvFile] = useState<FileData | null>(null);
   const [job, setJob] = useState('');
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
+  const [activeTab, setActiveTab] = useState<'generate' | 'history'>('generate');
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [history, setHistory] = useState<AnalysisResult[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -20,26 +33,54 @@ const App: React.FC = () => {
 
   React.useEffect(() => {
     // Vérification basique de la clé API
-    const apiKey = process.env.API_KEY;
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
     if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
       setApiKeyError(true);
     }
 
     // Charger les données sauvegardées
+    const loadHistory = async () => {
+      try {
+        // Essayer de charger depuis Supabase
+        const dbHistory = await fetchApplications();
+        if (dbHistory && dbHistory.length > 0) {
+          setHistory(dbHistory);
+          return;
+        }
+      } catch (err) {
+        console.warn("Impossible de charger l'historique Supabase, repli sur localStorage", err);
+      }
+
+      // Repli sur localStorage si Supabase échoue ou est vide
+      const savedHistory = localStorage.getItem('cv_booster_history');
+      if (savedHistory) {
+        try {
+          const parsed = JSON.parse(savedHistory);
+          if (Array.isArray(parsed)) {
+            setHistory(parsed);
+          }
+        } catch (e) {
+          console.error("Failed to parse history", e);
+        }
+      }
+    };
+
+    loadHistory();
+    
     const savedCv = localStorage.getItem('cv_booster_cv');
+    const savedCvFile = localStorage.getItem('cv_booster_cv_file');
     const savedJob = localStorage.getItem('cv_booster_job');
-    const savedHistory = localStorage.getItem('cv_booster_history');
     
     if (savedCv) setCv(savedCv);
     if (savedJob) setJob(savedJob);
-    if (savedHistory) {
+    if (savedCvFile) {
       try {
-        const parsed = JSON.parse(savedHistory);
-        if (Array.isArray(parsed)) {
-          setHistory(parsed);
+        const parsedFile = JSON.parse(savedCvFile);
+        if (parsedFile && parsedFile.data && parsedFile.mimeType) {
+          setCvFile(parsedFile);
         }
       } catch (e) {
-        console.error("Failed to parse history", e);
+        console.error("Erreur parsing fichier CV sauvegardé", e);
       }
     }
   }, []);
@@ -58,6 +99,17 @@ const App: React.FC = () => {
   React.useEffect(() => {
     localStorage.setItem('cv_booster_cv', cv);
   }, [cv]);
+  
+  // Sauvegarder le fichier CV
+  React.useEffect(() => {
+    if (cvFile) {
+      try {
+        localStorage.setItem('cv_booster_cv_file', JSON.stringify(cvFile));
+      } catch (e) {
+        console.warn("Fichier trop volumineux pour localStorage");
+      }
+    }
+  }, [cvFile]);
 
   React.useEffect(() => {
     localStorage.setItem('cv_booster_job', job);
@@ -80,12 +132,20 @@ const App: React.FC = () => {
       // Ajouter un ID et une date
       const resultWithMeta = {
         ...data,
-        id: crypto.randomUUID(),
-        createdAt: Date.now()
+        id: generateUUID(),
+        createdAt: Date.now(),
+        originalCVContent: cv,
+        originalJobDescription: job
       };
       
       setResult(resultWithMeta);
       setHistory(prev => [resultWithMeta, ...prev]);
+
+      // Sauvegarde asynchrone dans Supabase
+      saveApplication(resultWithMeta).catch(err => {
+        console.error("Erreur de sauvegarde Supabase", err);
+        // Ne bloque pas l'UI, l'utilisateur a toujours son résultat local
+      });
       
       setStatus(AppStatus.COMPLETED);
       // On scroll en haut pour voir le résultat
@@ -140,9 +200,23 @@ const App: React.FC = () => {
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Intelligence RH</p>
             </div>
           </div>
-          <nav className="hidden md:flex gap-6 text-sm font-semibold text-slate-600">
-            <button type="button" onClick={() => setActiveModal('guide')} className="hover:text-blue-600 transition-colors">Guide Entretien</button>
-            <button type="button" onClick={() => setActiveModal('ats')} className="hover:text-blue-600 transition-colors">Optimisation ATS</button>
+          <nav className="flex gap-6 text-sm font-semibold text-slate-600">
+            <button 
+              type="button" 
+              onClick={() => { setActiveTab('generate'); setStatus(AppStatus.IDLE); setResult(null); }} 
+              className={`transition-colors flex items-center gap-2 ${activeTab === 'generate' ? 'text-blue-600 font-bold' : 'hover:text-blue-600'}`}
+            >
+              <i className="fa-solid fa-wand-magic-sparkles"></i>
+              Générateur
+            </button>
+            <button 
+              type="button" 
+              onClick={() => { setActiveTab('history'); setStatus(AppStatus.IDLE); }} 
+              className={`transition-colors flex items-center gap-2 ${activeTab === 'history' ? 'text-blue-600 font-bold' : 'hover:text-blue-600'}`}
+            >
+              <i className="fa-solid fa-clock-rotate-left"></i>
+              Historique
+            </button>
           </nav>
         </div>
       </header>
@@ -159,8 +233,82 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {status === AppStatus.IDLE && (
-          <div className="max-w-4xl mx-auto text-center mb-16 animate-fadeIn">
+        {activeTab === 'history' ? (
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl font-bold text-slate-900 mb-8 flex items-center gap-3">
+              <i className="fa-solid fa-folder-open text-blue-600"></i>
+              Mes Candidatures
+            </h2>
+            
+            {history.length === 0 ? (
+              <div className="text-center py-20 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <i className="fa-solid fa-box-open text-slate-300 text-2xl"></i>
+                </div>
+                <p className="text-slate-500 font-medium">Aucune candidature sauvegardée pour le moment.</p>
+                <button 
+                  onClick={() => setActiveTab('generate')}
+                  className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors"
+                >
+                  Créer ma première candidature
+                </button>
+              </div>
+            ) : (
+              <div className="grid gap-6">
+                {history.map((item) => (
+                  <div key={item.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                      <div>
+                        <h3 className="text-xl font-bold text-slate-900">{item.improvedCV.professionalTitle}</h3>
+                        <p className="text-sm text-slate-500 flex items-center gap-2 mt-1">
+                          <i className="fa-regular fa-calendar"></i>
+                          {item.createdAt ? new Date(item.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Date inconnue'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                         <span className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded-full border border-blue-100">
+                           Score ATS : {item.atsScore || '?'}%
+                         </span>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-slate-50 p-4 rounded-xl mb-6 text-sm text-slate-600 border border-slate-100">
+                      <p className="font-bold text-xs text-slate-400 uppercase tracking-wider mb-2">Entreprise / Poste</p>
+                      <p className="line-clamp-2">{item.improvedCV.experiences[0]?.company || 'Non spécifié'} - {item.improvedCV.experiences[0]?.position}</p>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button 
+                        onClick={() => {
+                          setResult(item);
+                          setActiveTab('generate');
+                          setStatus(AppStatus.COMPLETED);
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className="flex-1 px-4 py-2 bg-slate-900 text-white rounded-lg font-bold text-sm hover:bg-black transition-colors flex items-center justify-center gap-2"
+                      >
+                        <i className="fa-solid fa-eye"></i>
+                        Voir le dossier complet
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveModal({ type: 'details', data: item });
+                        }}
+                        className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg font-bold text-sm hover:bg-slate-50 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <i className="fa-solid fa-circle-info"></i>
+                        Détails source
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {status === AppStatus.IDLE && (
+              <div className="max-w-4xl mx-auto text-center mb-16 animate-fadeIn">
             <span className="px-4 py-1.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full uppercase tracking-wider mb-6 inline-block">
               Propulsez votre carrière
             </span>
@@ -239,6 +387,8 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
+        </>
+      )}
       </main>
 
       {/* Footer */}
